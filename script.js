@@ -1,4 +1,4 @@
-alert("EstudaAI Inicializado - Botão Inteligente Play/Pause Integrado com Kodular!");
+alert("EstudaAI Inicializado - Versão Especial Otimizada para Celular!");
 
 // Garante que o objeto existirá mesmo se a WebView falhar em carregá-lo nativamente
 if (typeof window.speechSynthesis === 'undefined') {
@@ -47,6 +47,7 @@ let estaPausado = false;
 let tamanhoFonteAtual = 1.1; 
 let nomeArquivoAtual = "Documento Sem Nome";
 let textoCompletoBruto = ""; 
+let temporizadorFala = null; // Controla a transição automática de páginas
 
 let db;
 const request = indexedDB.open("EstudaAIBiblioteca", 1);
@@ -157,9 +158,7 @@ function excluirLivroIndividual(nome) {
 
         transacao.oncomplete = () => {
             if (nome === nomeArquivoAtual) {
-                if (window.AppInventor) {
-                    window.AppInventor.setWebViewString("PARAR_AUDIO");
-                }
+                pararAudioGeral();
                 localStorage.removeItem("estudaai_ultimo_livro");
                 nomeArquivoAtual = "Documento Sem Nome";
                 blocosDeTexto = [];
@@ -184,9 +183,7 @@ function trocarDeLivro(nome) {
     requisicao.onsuccess = () => {
         const livro = requisicao.result;
         if (livro) {
-            if (window.AppInventor) {
-                window.AppInventor.setWebViewString("PARAR_AUDIO");
-            }
+            pararAudioGeral();
             estaPausado = true;
             playBtn.textContent = "▶";
             nomeArquivoAtual = livro.nome;
@@ -281,9 +278,7 @@ modalTextArea.addEventListener("click", () => {
     }
 
     if (novoIndice !== -1) {
-        if (window.AppInventor) {
-            window.AppInventor.setWebViewString("PARAR_AUDIO");
-        }
+        pararAudioGeral();
         
         indiceAtual = novoIndice;
         salvarProgressoNoDispositivo();
@@ -316,9 +311,7 @@ fileInput.addEventListener("change", async (event) => {
         const arquivo = event.target.files[0];
         if (!arquivo) return;
 
-        if (window.AppInventor) {
-            window.AppInventor.setWebViewString("PARAR_AUDIO");
-        }
+        pararAudioGeral();
         blocosDeTexto = [];
         indiceAtual = 0;
         estaPausado = true;
@@ -419,7 +412,17 @@ rateInput.addEventListener("input", () => {
     rateValue.textContent = rateInput.value + "x";
 });
 
-// ALTERAÇÃO CRUCIAL KODULAR: Envia o texto da página atual diretamente para a interface do app falar nativamente
+function pararAudioGeral() {
+    if (temporizadorFala) {
+        clearTimeout(temporizadorFala);
+        temporizadorFala = null;
+    }
+    if (window.AppInventor) {
+        window.AppInventor.setWebViewString("PARAR_AUDIO");
+    }
+}
+
+// SOLUÇÃO INTELIGENTE PARA CELULAR: Envia o áudio e autogerencia o avanço de páginas sem depender de códigos nos blocos
 function lerBlocoAtual() {
     if (indiceAtual >= blocosDeTexto.length || estaPausado) {
         if (indiceAtual >= blocosDeTexto.length && blocosDeTexto.length > 0) {
@@ -439,11 +442,27 @@ function lerBlocoAtual() {
 
     renderizarModoFoco();
 
-    // Envia o texto para a WebViewString do Kodular processar nativamente no Android
+    if (temporizadorFala) clearTimeout(temporizadorFala);
+
+    // Modo Aplicativo (Kodular)
     if (window.AppInventor) {
         window.AppInventor.setWebViewString(textoParaFalar.trim());
+        
+        // Fator de velocidade adaptativo (Padrão: 1x = 75ms por caractere)
+        const fatorVelocidade = 75 / parseFloat(rateInput.value);
+        const tempoEsperaCalculado = (textoParaFalar.length * fatorVelocidade) + 1200; // Adiciona margem de respiro
+
+        temporizadorFala = setTimeout(() => {
+            if (!estaPausado) {
+                indiceAtual++;
+                salvarProgressoNoDispositivo();
+                atualizarBarraProgresso();
+                lerBlocoAtual();
+            }
+        }, tempoEsperaCalculado);
+
     } else {
-        // Fallback estrutural seguro caso teste em um navegador web comum
+        // Fallback para testes diretos no Navegador Web Comum do PC
         if (window.speechSynthesis) {
             const fala = new SpeechSynthesisUtterance(textoParaFalar.trim());
             fala.lang = "pt-BR";
@@ -462,9 +481,7 @@ function lerBlocoAtual() {
 }
 
 function reiniciarLeituraSemDeletar() {
-    if (window.AppInventor) {
-        window.AppInventor.setWebViewString("PARAR_AUDIO");
-    }
+    pararAudioGeral();
     estaPausado = true; 
     playBtn.textContent = "▶"; 
     indiceAtual = 0;    
@@ -482,9 +499,7 @@ playBtn.addEventListener("click", () => {
     if (!estaPausado) {
         estaPausado = true;
         playBtn.textContent = "▶";
-        if (window.AppInventor) {
-            window.AppInventor.setWebViewString("PARAR_AUDIO");
-        }
+        pararAudioGeral();
     } else {
         estaPausado = false;
         playBtn.textContent = "⏸";
@@ -498,7 +513,7 @@ stopBtn.addEventListener("click", () => {
 
 prevBtn.addEventListener("click", () => {
     if (indiceAtual > 0) {
-        if (window.AppInventor) window.AppInventor.setWebViewString("PARAR_AUDIO");
+        pararAudioGeral();
         indiceAtual--;
         salvarProgressoNoDispositivo();
         atualizarBarraProgresso();
@@ -509,7 +524,7 @@ prevBtn.addEventListener("click", () => {
 
 nextBtn.addEventListener("click", () => {
     if (indiceAtual < blocosDeTexto.length - 1) {
-        if (window.AppInventor) window.AppInventor.setWebViewString("PARAR_AUDIO");
+        pararAudioGeral();
         indiceAtual++;
         salvarProgressoNoDispositivo();
         atualizarBarraProgresso();

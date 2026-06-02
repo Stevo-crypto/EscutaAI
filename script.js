@@ -13,8 +13,6 @@ const playBtn = document.getElementById("playBtn");
 const stopBtn = document.getElementById("stopBtn");
 const prevBtn = document.getElementById("prevBtn"); 
 const nextBtn = document.getElementById("nextBtn"); 
-const rateInput = document.getElementById("rate");
-const rateValue = document.getElementById("rateValue");
 
 const progressBar = document.getElementById("progressBar");
 const progressText = document.getElementById("progressText");
@@ -227,7 +225,6 @@ function lerArquivoTXT(arquivo) {
     leitor.readAsText(arquivo);
 }
 
-// PDF Otimizado: Pula erros causados por imagens e mídias pesadas
 function lerArquivoPDF(arquivo) {
     const leitor = new FileReader();
     leitor.onload = async function (e) {
@@ -246,7 +243,7 @@ function lerArquivoPDF(arquivo) {
                     let textoPaginaLimpo = textoPaginaCru.replace(/\s+/g, " ").replace(/çõ\s+es/g, "ções").trim();
                     if (textoPaginaLimpo.length > 5) { textoAcumuladoGeral += textoPaginaLimpo + `\n\n--- FIM DA PÁGINA ${i} ---\n\n`; }
                 } catch (erroPagina) {
-                    console.log("Ignorando imagem pesada na página " + i);
+                    console.log("Ignorando mídia pesada da página " + i);
                     continue;
                 }
             }
@@ -258,7 +255,6 @@ function lerArquivoPDF(arquivo) {
     leitor.readAsArrayBuffer(arquivo);
 }
 
-// Nova Função: Processa livros no formato EPUB extraindo o texto limpo
 function lerArquivoEPUB(arquivo) {
     if (typeof ePub === 'undefined') {
         alert("Biblioteca EPUB não inicializada no index.html.");
@@ -307,8 +303,6 @@ function lerArquivoEPUB(arquivo) {
     };
     leitor.readAsArrayBuffer(arquivo);
 }
-
-rateInput.addEventListener("input", () => { rateValue.textContent = rateInput.value + "x"; });
 
 function pararAudioGeral() {
     if (temporizadorFala) { clearTimeout(temporizadorFala); temporizadorFala = null; }

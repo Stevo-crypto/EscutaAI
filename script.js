@@ -1,4 +1,4 @@
-alert("EstudaAI Inicializado - OCR e Correção de PDFs Ativados!");
+alert("EstudaAI Inicializado - Correção de EPUB e OCR Ativados!");
 
 if (typeof window.speechSynthesis === 'undefined') {
     window.speechSynthesis = {
@@ -141,7 +141,7 @@ function trocarDeLivro(nome) {
     };
 }
 
-function recuperarUltimoLivroLido() {
+function recuperarUltimoLivro Lido() {
     const ultimoNome = localStorage.getItem("estudaai_ultimo_livro");
     if (ultimoNome) trocarDeLivro(ultimoNome);
 }
@@ -225,7 +225,6 @@ function lerArquivoTXT(arquivo) {
     leitor.readAsText(arquivo);
 }
 
-// PDF OTIMIZADO - CORRIGE TEXTOS QUEBRADOS / FONTES MAL CODIFICADAS E TRADUZ POR OCR
 function lerArquivoPDF(arquivo) {
     const leitor = new FileReader();
     leitor.onload = async function (e) {
@@ -247,20 +246,16 @@ function lerArquivoPDF(arquivo) {
                     let textoPaginaCru = ""; 
                     for (const item of conteudoTexto.items) { textoPaginaCru += item.str + " "; }
                     
-                    // Remove comandos ocultos invisíveis que quebram o layout do livro antigo
                     let textoPaginaLimpo = textoPaginaCru
                         .replace(/[\r\n\t\f\v]/g, " ") 
                         .replace(/\s+/g, " ")          
                         .trim();
                     
-                    // Avalia se o texto digital nativo é real ou apenas lixo eletrônico (\f, \t, @, bizarro)
                     let apenasLetras = textoPaginaLimpo.replace(/[^a-zA-ZáàâãéèêíïóôõöúçñÁÀÂÃÉÈÊÍÏÓÔÕÖÚÇÑ\s]/g, "");
                     
-                    // Se a página tiver texto digital legível de verdade, usa direto (Super Rápido)
                     if (textoPaginaLimpo.length > 25 && apenasLetras.trim().length > (textoPaginaLimpo.length * 0.4)) {
                         textoAcumuladoGeral += textoPaginaLimpo + `\n\n--- FIM DA PÁGINA ${i} ---\n\n`;
                     } else {
-                        // Se falhar no teste de qualidade (texto todo mascado ou imagem pura), aciona o scanner de IA
                         lineCurrent.textContent = `Escaneando texto por inteligência artificial na pág. ${i}...`;
                         
                         const visualizacao = pagina.getViewport({ scale: 1.5 });
@@ -293,6 +288,7 @@ function lerArquivoPDF(arquivo) {
     leitor.readAsArrayBuffer(arquivo);
 }
 
+// FUNÇÃO EPUB CORRIGIDA CONFORME A DOCUMENTAÇÃO ATUAL DA BIBLIOTECA
 function lerArquivoEPUB(arquivo) {
     if (typeof ePub === 'undefined') {
         alert("Biblioteca EPUB não inicializada no index.html.");
@@ -308,26 +304,31 @@ function lerArquivoEPUB(arquivo) {
             let textoAcumuladoGeral = "";
             let contadorPagina = 1;
             
-            const spike = livroEpub.spine;
-            for (let i = 0; i < spike.items.length; i++) {
-                const item = spike.items[i];
-                await item.load(livroEpub.load.bind(livroEpub));
-                const documentoCapitulo = item.document;
-                
-                if (documentoCapitulo && documentoCapitulo.body) {
-                    let textoCapitulo = documentoCapitulo.body.innerText || documentoCapitulo.body.textContent || "";
-                    let textoLimpo = textoCapitulo.replace(/\s+/g, " ").trim();
+            // Método correto de navegação sequencial da estrutura do EpubJS
+            const secoesDoLivro = livroEpub.spine;
+            
+            for (let i = 0; i < secoesDoLivro.length; i++) {
+                const itemSpine = secoesDoLivro.get(i);
+                if (itemSpine) {
+                    // Carrega o documento do capítulo diretamente pelo core do livro
+                    await itemSpine.load(livroEpub.load.bind(livroEpub));
+                    const documentoCapitulo = itemSpine.document;
                     
-                    if (textoLimpo.length > 10) {
-                        textoAcumuladoGeral += textoLimpo + `\n\n--- FIM DA PÁGINA ${contadorPagina} ---\n\n`;
-                        contadorPagina++;
+                    if (documentoCapitulo && documentoCapitulo.body) {
+                        let textoCapitulo = documentoCapitulo.body.innerText || documentoCapitulo.body.textContent || "";
+                        let textoLimpo = textoCapitulo.replace(/\s+/g, " ").trim();
+                        
+                        if (textoLimpo.length > 10) {
+                            textoAcumuladoGeral += textoLimpo + `\n\n--- FIM DA PÁGINA ${contadorPagina} ---\n\n`;
+                            contadorPagina++;
+                        }
                     }
+                    itemSpine.unload();
                 }
-                item.unload();
             }
             
             if (textoAcumuladoGeral.trim() === "") {
-                lineCurrent.textContent = "Este arquivo EPUB não possui texto extraível.";
+                lineCurrent.textContent = "Este arquivo EPUB não possui texto extraível legível.";
                 return;
             }
 

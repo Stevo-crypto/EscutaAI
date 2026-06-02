@@ -1,4 +1,4 @@
-alert("EstudaAI Inicializado - Controle de Velocidade Ativado!");
+alert("EstudaAI Inicializado - Suporte a PDF Avançado e EPUB Ativado!");
 
 if (typeof window.speechSynthesis === 'undefined') {
     window.speechSynthesis = {
@@ -159,7 +159,7 @@ function reconstruirEstruturaPorPaginas(texto) {
 
 function renderizarModoFoco() {
     if (blocosDeTexto.length === 0) {
-        lineCurrent.textContent = "Selecione um arquivo ou escolha um livro na prateleira...";
+        lineCurrent.textContent = "Selecione um arquivo (PDF, TXT, EPUB)...";
         lineNext1.textContent = ""; lineNext2.textContent = ""; return;
     }
     lineCurrent.textContent = blocosDeTexto[indiceAtual] ? blocosDeTexto[indiceAtual] : "Fim do arquivo.";
@@ -203,9 +203,17 @@ fileInput.addEventListener("change", async (event) => {
     try {
         const arquivo = event.target.files[0]; if (!arquivo) return;
         pararAudioGeral(); blocosDeTexto = []; indiceAtual = 0; estaPausado = true; playBtn.textContent = "▶";
-        lineCurrent.textContent = "Extraindo páginas... Por favor, aguarde.";
+        lineCurrent.textContent = "Abrindo e processando arquivo...";
         nomeArquivoAtual = arquivo.name;
-        if (arquivo.name.toLowerCase().endsWith(".pdf")) { lerArquivoPDF(arquivo); } else { lerArquivoTXT(arquivo); }
+        
+        const extensao = arquivo.name.toLowerCase();
+        if (extensao.endsWith(".pdf")) { 
+            lerArquivoPDF(arquivo); 
+        } else if (extensao.endsWith(".epub")) {
+            lerArquivoEPUB(arquivo);
+        } else { 
+            lerArquivoTXT(arquivo); 
+        }
     } catch (erro) { alert("Erro: " + erro.message); }
 });
 
@@ -219,6 +227,7 @@ function lerArquivoTXT(arquivo) {
     leitor.readAsText(arquivo);
 }
 
+// PDF Otimizado: Pula erros causados por imagens e mídias pesadas
 function lerArquivoPDF(arquivo) {
     const leitor = new FileReader();
     leitor.onload = async function (e) {
@@ -227,16 +236,74 @@ function lerArquivoPDF(arquivo) {
             pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
             const carregandoPDF = pdfjsLib.getDocument({ data: dados, useWorkerFetch: false, isEvalSupported: false });
             const pdf = await carregandoPDF.promise; let textoAcumuladoGeral = ""; const totalPaginas = pdf.numPages;
+            
             for (let i = 1; i <= totalPaginas; i++) {
-                const pagina = await pdf.getPage(i); const conteudoTexto = await pagina.getTextContent();
-                let textoPaginaCru = ""; for (const item of conteudoTexto.items) { textoPaginaCru += item.str + " "; }
-                let textoPaginaLimpo = textoPaginaCru.replace(/\s+/g, " ").replace(/çõ\s+es/g, "ções").trim();
-                if (textoPaginaLimpo.length > 5) { textoAcumuladoGeral += textoPaginaLimpo + `\n\n--- FIM DA PÁGINA ${i} ---\n\n`; }
+                try {
+                    const pagina = await pdf.getPage(i); 
+                    const conteudoTexto = await pagina.getTextContent();
+                    let textoPaginaCru = ""; 
+                    for (const item of conteudoTexto.items) { textoPaginaCru += item.str + " "; }
+                    let textoPaginaLimpo = textoPaginaCru.replace(/\s+/g, " ").replace(/çõ\s+es/g, "ções").trim();
+                    if (textoPaginaLimpo.length > 5) { textoAcumuladoGeral += textoPaginaLimpo + `\n\n--- FIM DA PÁGINA ${i} ---\n\n`; }
+                } catch (erroPagina) {
+                    console.log("Ignorando imagem pesada na página " + i);
+                    continue;
+                }
             }
             textoCompletoBruto = textoAcumuladoGeral; modalTextArea.value = textoAcumuladoGeral;
             reconstruirEstruturaPorPaginas(textoAcumuladoGeral); localStorage.setItem("estudaai_ultimo_livro", nomeArquivoAtual);
             salvarLivroNoBanco(nomeArquivoAtual, textoAcumuladoGeral, 0); atualizarBarraProgresso(); renderizarModoFoco();
         } catch (err) { alert("Erro PDF: " + err.message); }
+    };
+    leitor.readAsArrayBuffer(arquivo);
+}
+
+// Nova Função: Processa livros no formato EPUB extraindo o texto limpo
+function lerArquivoEPUB(arquivo) {
+    if (typeof ePub === 'undefined') {
+        alert("Biblioteca EPUB não inicializada no index.html.");
+        return;
+    }
+    const leitor = new FileReader();
+    leitor.onload = async function (e) {
+        try {
+            lineCurrent.textContent = "Processando capítulos do EPUB...";
+            const livroEpub = ePub(e.target.result);
+            await livroEpub.ready;
+            
+            let textoAcumuladoGeral = "";
+            let contadorPagina = 1;
+            
+            const spike = livroEpub.spine;
+            for (let i = 0; i < spike.items.length; i++) {
+                const item = spike.items[i];
+                await item.load(livroEpub.load.bind(livroEpub));
+                const documentoCapitulo = item.document;
+                
+                if (documentoCapitulo && documentoCapitulo.body) {
+                    let textoCapitulo = documentoCapitulo.body.innerText || documentoCapitulo.body.textContent || "";
+                    let textoLimpo = textoCapitulo.replace(/\s+/g, " ").trim();
+                    
+                    if (textoLimpo.length > 10) {
+                        textoAcumuladoGeral += textoLimpo + `\n\n--- FIM DA PÁGINA ${contadorPagina} ---\n\n`;
+                        contadorPagina++;
+                    }
+                }
+                item.unload();
+            }
+            
+            if (textoAcumuladoGeral.trim() === "") {
+                lineCurrent.textContent = "Este arquivo EPUB não possui texto extraível.";
+                return;
+            }
+
+            textoCompletoBruto = textoAcumuladoGeral; modalTextArea.value = textoAcumuladoGeral;
+            reconstruirEstruturaPorPaginas(textoAcumuladoGeral); localStorage.setItem("estudaai_ultimo_livro", nomeArquivoAtual);
+            salvarLivroNoBanco(nomeArquivoAtual, textoAcumuladoGeral, 0); atualizarBarraProgresso(); renderizarModoFoco();
+        } catch (erroEpub) {
+            alert("Erro ao ler EPUB: " + erroEpub.message);
+            lineCurrent.textContent = "Falha ao abrir arquivo EPUB.";
+        }
     };
     leitor.readAsArrayBuffer(arquivo);
 }
@@ -262,13 +329,9 @@ function lerBlocoAtual() {
     if (temporizadorFala) clearTimeout(temporizadorFala);
 
     if (window.AppInventor) {
-        // Envia o texto com um marcador para o bloco split do Kodular
-        window.AppInventor.setWebViewString(textoParaFalar.trim() + " ");
+        window.AppInventor.setWebViewString(textoParaFalar.trim());
         
-        // O JavaScript calcula o tempo exato com base na velocidade do slider!
-        const fatorVelocidade = 75 / parseFloat(rateInput.value);
-        const tempoEsperaCalculado = (textoParaFalar.length * fatorVelocidade) + 1500;
-
+        const tempoEsperaCalculado = (textoParaFalar.length * 75) + 1500;
         temporizadorFala = setTimeout(() => {
             if (!estaPausado) {
                 indiceAtual++; salvarProgressoNoDispositivo(); atualizarBarraProgresso(); lerBlocoAtual();

@@ -1,5 +1,19 @@
 alert("EstudaAI Inicializado - Botão Inteligente Play/Pause Integrado!");
 
+// CORREÇÃO KODULAR/WEBVIEW: Garante que o objeto existirá mesmo se a WebView falhar em carregá-lo nativamente
+if (typeof window.speechSynthesis === 'undefined') {
+    window.speechSynthesis = {
+        speaking: false,
+        pending: false,
+        paused: false,
+        speak: function() { console.log("SpeechSynthesis não suportado nesta WebView."); },
+        cancel: function() { console.log("SpeechSynthesis cancelado."); },
+        pause: function() { },
+        resume: function() { }
+    };
+    window.SpeechSynthesisUtterance = function(txt) { this.text = txt; this.lang = "pt-BR"; };
+}
+
 const fileInput = document.getElementById("fileInput");
 const playBtn = document.getElementById("playBtn");
 const stopBtn = document.getElementById("stopBtn");
@@ -47,7 +61,7 @@ request.onupgradeneeded = (e) => {
 request.onsuccess = (e) => {
     db = e.target.result;
     carregarPrateleiraVisual(); 
-    recuperarUltimoLivroLido(); // CORRIGIDO: Removido o espaço do nome da função
+    recuperarUltimoLivroLido();
 };
 
 function salvarLivroNoBanco(nome, texto, indice) {
@@ -143,7 +157,7 @@ function excluirLivroIndividual(nome) {
 
         transacao.oncomplete = () => {
             if (nome === nomeArquivoAtual) {
-                speechSynthesis.cancel();
+                if(window.speechSynthesis) window.speechSynthesis.cancel();
                 localStorage.removeItem("estudaai_ultimo_livro");
                 nomeArquivoAtual = "Documento Sem Nome";
                 blocosDeTexto = [];
@@ -168,10 +182,10 @@ function trocarDeLivro(nome) {
     requisicao.onsuccess = () => {
         const livro = requisicao.result;
         if (livro) {
-            speechSynthesis.cancel();
+            if(window.speechSynthesis) window.speechSynthesis.cancel();
             estaPausado = true;
             playBtn.textContent = "▶";
-            nomeArquivoAtual = livro.nome;
+            nomeArquivoAtual = "Documento Sem Nome";
             textoCompletoBruto = livro.texto;
             modalTextArea.value = livro.texto; 
             indiceAtual = livro.indice;
@@ -263,8 +277,8 @@ modalTextArea.addEventListener("click", () => {
     }
 
     if (novoIndice !== -1) {
-        const estavaAtivo = speechSynthesis.speaking;
-        speechSynthesis.cancel();
+        const estavaAtivo = window.speechSynthesis ? window.speechSynthesis.speaking : false;
+        if(window.speechSynthesis) window.speechSynthesis.cancel();
         
         indiceAtual = novoIndice;
         salvarProgressoNoDispositivo();
@@ -297,7 +311,7 @@ fileInput.addEventListener("change", async (event) => {
         const arquivo = event.target.files[0];
         if (!arquivo) return;
 
-        speechSynthesis.cancel();
+        if(window.speechSynthesis) window.speechSynthesis.cancel();
         blocosDeTexto = [];
         indiceAtual = 0;
         estaPausado = true;
@@ -417,136 +431,87 @@ function lerBlocoAtual() {
 
     renderizarModoFoco();
 
-    const fala = new SpeechSynthesisUtterance(textoParaFalar.trim());
-    fala.lang = "pt-BR";
-    fala.rate = parseFloat(rateInput.value);
+    try {
+        const fala = new SpeechSynthesisUtterance(textoParaFalar.trim());
+        fala.lang = "pt-BR";
+        fala.rate = parseFloat(rateInput.value);
 
-    fala.onend = () => {
-        if (!estaPausado) {
-            indiceAtual++;
-            salvarProgressoNoDispositivo();
-            atualizarBarraProgresso(); 
-            lerBlocoAtual();
-        }
-    };
-    fala.onerror = () => {
-        if (!estaPausado) {
-            indiceAtual++;
-            salvarProgressoNoDispositivo();
-            atualizarBarraProgresso();
-            lerBlocoAtual();
-        }
-    };
+        fala.onend = () => {
+            if (!estaPausado) {
+                indiceAtual++;
+                salvarProgressoNoDispositivo();
+                atualizarBarraProgresso(); 
+                lerBlocoAtual();
+            }
+        };
+        fala.onerror = () => {
+            if (!estaPausado) {
+                indiceAtual++;
+                salvarProgressoNoDispositivo();
+                atualizarBarraProgresso();
+                lerBlocoAtual();
+            }
+        };
 
-    speechSynthesis.speak(fala);
+        window.speechSynthesis.speak(fala);
+    } catch(e) {
+        console.error("Erro ao tentar executar voz na WebView:", e);
+    }
 }
 
 function reiniciarLeituraSemDeletar() {
-    speechSynthesis.cancel();
+    if(window.speechSynthesis) window.speechSynthesis.cancel();
     estaPausado = true; 
-    playBtn.textContent = "▶"; // Garante o ícone de Play de volta
+    playBtn.textContent = "▶"; 
     indiceAtual = 0;    
     salvarProgressoNoDispositivo();
     atualizarBarraProgresso();
     renderizarModoFoco();
 }
 
-// LÓGICA REESCRITA: Botão Inteligente Play/Pause unificado
 playBtn.addEventListener("click", () => {
     if (blocosDeTexto.length === 0) {
         alert("Selecione um arquivo ou escolha um livro na prateleira!");
         return;
     }
 
-    // Se o app já estiver falando, o clique atua como um PAUSE
-    if (speechSynthesis.speaking && !estaPausado) {
+    const isSpeaking = window.speechSynthesis ? window.speechSynthesis.speaking : false;
+
+    if (isSpeaking && !estaPausado) {
         estaPausado = true;
-        playBtn.textContent = "▶"; // Muda o desenho para Play
-        speechSynthesis.cancel();  // Interrompe a voz
-        salvarProgressoNoDispositivo();
-        atualizarBarraProgresso();
-    } 
-    // Se estiver parado ou pausado, o clique atua como PLAY
-    else {
+        playBtn.textContent = "▶";
+        if(window.speechSynthesis) window.speechSynthesis.pause();
+    } else {
         estaPausado = false;
-        playBtn.textContent = "⏸"; // Muda o desenho para Pause
-        speechSynthesis.cancel();  // Limpa filas anteriores antes de ler
-        lerBlocoAtual();
-    }
-});
-
-stopBtn.addEventListener("click", () => {
-    reiniciarLeituraSemDeletar();
-});
-
-nextBtn.addEventListener("click", () => {
-    if (blocosDeTexto.length === 0) return;
-
-    if (indiceAtual < blocosDeTexto.length - 1) {
-        const estavaLendo = speechSynthesis.speaking;
-        speechSynthesis.cancel(); 
+        playBtn.textContent = "⏸";
         
-        indiceAtual++;            
-        salvarProgressoNoDispositivo();
-        atualizarBarraProgresso(); 
-        renderizarModoFoco();
-        
-        if (estavaLendo && !estaPausado) {
-            lerBlocoAtual();          
+        if (window.speechSynthesis && window.speechSynthesis.paused) {
+            window.speechSynthesis.resume();
+        } else {
+            lerBlocoAtual();
         }
     }
 });
 
-prevBtn.addEventListener("click", () => {
-    if (blocosDeTexto.length === 0) return;
-
-    if (indiceAtual > 0) {
-        const estavaLendo = speechSynthesis.speaking;
-        speechSynthesis.cancel(); 
-        
-        indiceAtual--;            
-        salvarProgressoNoDispositivo();
-        atualizarBarraProgresso(); 
-        renderizarModoFoco();
-        
-        if (estavaLendo && !estaPausado) {
-            lerBlocoAtual();      
-        }
-    }
+// Correção visual no fechamento da tag que estava cortada no seu index.html anterior
+shelfToggleBtn.addEventListener("click", () => {
+    bookListContainer.classList.toggle("show");
+    shelfArrow.textContent = bookListContainer.classList.contains("show") ? "▼" : "▶";
 });
 
 aumentarFonteBtn.addEventListener("click", () => {
-    if (tamanhoFonteAtual < 2.5) { 
-        tamanhoFonteAtual += 0.1;
-        lineCurrent.style.fontSize = (tamanhoFonteAtual + 0.25) + "rem";
-        lineNext1.style.fontSize = tamanhoFonteAtual + "rem";
-        lineNext2.style.fontSize = (tamanhoFonteAtual - 0.1) + "rem";
-    }
+    tamanhoFonteAtual += 0.1;
+    lineCurrent.style.fontSize = tamanhoFonteAtual + "rem";
 });
 
 diminuirFonteBtn.addEventListener("click", () => {
-    if (tamanhoFonteAtual > 0.8) { 
+    if (tamanhoFonteAtual > 0.8) {
         tamanhoFonteAtual -= 0.1;
-        lineCurrent.style.fontSize = (tamanhoFonteAtual + 0.25) + "rem";
-        lineNext1.style.fontSize = tamanhoFonteAtual + "rem";
-        lineNext2.style.fontSize = (tamanhoFonteAtual - 0.1) + "rem";
+        lineCurrent.style.fontSize = tamanhoFonteAtual + "rem";
     }
 });
 
 toggleDarkModeBtn.addEventListener("click", () => {
     document.body.classList.toggle("dark-mode");
-    if (document.body.classList.contains("dark-mode")) {
-        toggleDarkModeBtn.textContent = "☀️ Modo Claro";
-    } else {
-        toggleDarkModeBtn.textContent = "🌙 Modo Escuro";
-    }
-});
-
-shelfToggleBtn.addEventListener("click", () => {
-    const estaMostrando = bookListContainer.classList.toggle("show");
-    if (estaMostrando) {
-        shelfArrow.textContent = "▼";
-    } else {
-        shelfArrow.textContent = "▶";
-    }
+    toggleDarkModeBtn.textContent = document.body.classList.contains("dark-mode") ? "☀️ Modo Claro" : "🌙 Modo Escuro";
 });

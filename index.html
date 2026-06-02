@@ -80,12 +80,6 @@
         body.dark-mode .btn-circle.primary { background: #008b8b; color: white; }
         .btn-circle.primary:hover { background: #007373; }
 
-        .speed-row { display: none; align-items: center; justify-content: space-between; padding: 0 5px; }
-        .speed-row label { font-size: 0.8rem; font-weight: 600; color: #666; }
-        body.dark-mode .speed-row label { color: #aaa; }
-        .speed-row input[type="range"] { flex: 1; margin: 0 10px; accent-color: #008b8b; }
-        .speed-value { font-size: 0.8rem; font-weight: bold; color: #008b8b; min-width: 30px; text-align: right; }
-
         .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: none; justify-content: center; align-items: center; z-index: 1000; padding: 20px; }
         .modal-box { background: white; width: 100%; max-width: 500px; height: 80vh; border-radius: 12px; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 5px 15px rgba(0,0,0,0.2); }
         body.dark-mode .modal-box { background: #1e1e1e; }
@@ -147,12 +141,6 @@
             <button id="stopBtn" class="btn-circle" title="Reiniciar">⏹</button>
             <button id="aumentarFonteBtn" class="btn-circle" title="Aumentar Fonte">A+</button>
         </div>
-
-        <div class="speed-row">
-            <label for="rate">Velocidade:</label>
-            <input type="range" id="rate" min="0.5" max="2" value="1" step="0.1">
-            <span id="rateValue" class="speed-value">1x</span>
-        </div>
     </div>
 
     <div id="modalOverlay" class="modal-overlay">
@@ -170,7 +158,6 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/epubjs/dist/epub.min.js"></script>
-    
     <script src="script.js"></script>
 
 </body>

@@ -1,6 +1,6 @@
-alert("EstudaAI Inicializado - Botão Inteligente Play/Pause Integrado!");
+alert("EstudaAI Inicializado - Botão Inteligente Play/Pause Integrado com Kodular!");
 
-// CORREÇÃO KODULAR/WEBVIEW: Garante que o objeto existirá mesmo se a WebView falhar em carregá-lo nativamente
+// Garante que o objeto existirá mesmo se a WebView falhar em carregá-lo nativamente
 if (typeof window.speechSynthesis === 'undefined') {
     window.speechSynthesis = {
         speaking: false,
@@ -157,7 +157,9 @@ function excluirLivroIndividual(nome) {
 
         transacao.oncomplete = () => {
             if (nome === nomeArquivoAtual) {
-                if(window.speechSynthesis) window.speechSynthesis.cancel();
+                if (window.AppInventor) {
+                    window.AppInventor.setWebViewString("PARAR_AUDIO");
+                }
                 localStorage.removeItem("estudaai_ultimo_livro");
                 nomeArquivoAtual = "Documento Sem Nome";
                 blocosDeTexto = [];
@@ -182,10 +184,12 @@ function trocarDeLivro(nome) {
     requisicao.onsuccess = () => {
         const livro = requisicao.result;
         if (livro) {
-            if(window.speechSynthesis) window.speechSynthesis.cancel();
+            if (window.AppInventor) {
+                window.AppInventor.setWebViewString("PARAR_AUDIO");
+            }
             estaPausado = true;
             playBtn.textContent = "▶";
-            nomeArquivoAtual = "Documento Sem Nome";
+            nomeArquivoAtual = livro.nome;
             textoCompletoBruto = livro.texto;
             modalTextArea.value = livro.texto; 
             indiceAtual = livro.indice;
@@ -277,8 +281,9 @@ modalTextArea.addEventListener("click", () => {
     }
 
     if (novoIndice !== -1) {
-        const estavaAtivo = window.speechSynthesis ? window.speechSynthesis.speaking : false;
-        if(window.speechSynthesis) window.speechSynthesis.cancel();
+        if (window.AppInventor) {
+            window.AppInventor.setWebViewString("PARAR_AUDIO");
+        }
         
         indiceAtual = novoIndice;
         salvarProgressoNoDispositivo();
@@ -287,7 +292,7 @@ modalTextArea.addEventListener("click", () => {
         
         modalOverlay.style.display = "none";
 
-        if (estavaAtivo && !estaPausado) {
+        if (!estaPausado) {
             lerBlocoAtual();
         }
     }
@@ -311,7 +316,9 @@ fileInput.addEventListener("change", async (event) => {
         const arquivo = event.target.files[0];
         if (!arquivo) return;
 
-        if(window.speechSynthesis) window.speechSynthesis.cancel();
+        if (window.AppInventor) {
+            window.AppInventor.setWebViewString("PARAR_AUDIO");
+        }
         blocosDeTexto = [];
         indiceAtual = 0;
         estaPausado = true;
@@ -412,6 +419,7 @@ rateInput.addEventListener("input", () => {
     rateValue.textContent = rateInput.value + "x";
 });
 
+// ALTERAÇÃO CRUCIAL KODULAR: Envia o texto da página atual diretamente para a interface do app falar nativamente
 function lerBlocoAtual() {
     if (indiceAtual >= blocosDeTexto.length || estaPausado) {
         if (indiceAtual >= blocosDeTexto.length && blocosDeTexto.length > 0) {
@@ -431,36 +439,32 @@ function lerBlocoAtual() {
 
     renderizarModoFoco();
 
-    try {
-        const fala = new SpeechSynthesisUtterance(textoParaFalar.trim());
-        fala.lang = "pt-BR";
-        fala.rate = parseFloat(rateInput.value);
-
-        fala.onend = () => {
-            if (!estaPausado) {
-                indiceAtual++;
-                salvarProgressoNoDispositivo();
-                atualizarBarraProgresso(); 
-                lerBlocoAtual();
-            }
-        };
-        fala.onerror = () => {
-            if (!estaPausado) {
-                indiceAtual++;
-                salvarProgressoNoDispositivo();
-                atualizarBarraProgresso();
-                lerBlocoAtual();
-            }
-        };
-
-        window.speechSynthesis.speak(fala);
-    } catch(e) {
-        console.error("Erro ao tentar executar voz na WebView:", e);
+    // Envia o texto para a WebViewString do Kodular processar nativamente no Android
+    if (window.AppInventor) {
+        window.AppInventor.setWebViewString(textoParaFalar.trim());
+    } else {
+        // Fallback estrutural seguro caso teste em um navegador web comum
+        if (window.speechSynthesis) {
+            const fala = new SpeechSynthesisUtterance(textoParaFalar.trim());
+            fala.lang = "pt-BR";
+            fala.rate = parseFloat(rateInput.value);
+            fala.onend = () => {
+                if (!estaPausado) {
+                    indiceAtual++;
+                    salvarProgressoNoDispositivo();
+                    atualizarBarraProgresso(); 
+                    lerBlocoAtual();
+                }
+            };
+            window.speechSynthesis.speak(fala);
+        }
     }
 }
 
 function reiniciarLeituraSemDeletar() {
-    if(window.speechSynthesis) window.speechSynthesis.cancel();
+    if (window.AppInventor) {
+        window.AppInventor.setWebViewString("PARAR_AUDIO");
+    }
     estaPausado = true; 
     playBtn.textContent = "▶"; 
     indiceAtual = 0;    
@@ -475,25 +479,45 @@ playBtn.addEventListener("click", () => {
         return;
     }
 
-    const isSpeaking = window.speechSynthesis ? window.speechSynthesis.speaking : false;
-
-    if (isSpeaking && !estaPausado) {
+    if (!estaPausado) {
         estaPausado = true;
         playBtn.textContent = "▶";
-        if(window.speechSynthesis) window.speechSynthesis.pause();
+        if (window.AppInventor) {
+            window.AppInventor.setWebViewString("PARAR_AUDIO");
+        }
     } else {
         estaPausado = false;
         playBtn.textContent = "⏸";
-        
-        if (window.speechSynthesis && window.speechSynthesis.paused) {
-            window.speechSynthesis.resume();
-        } else {
-            lerBlocoAtual();
-        }
+        lerBlocoAtual();
     }
 });
 
-// Correção visual no fechamento da tag que estava cortada no seu index.html anterior
+stopBtn.addEventListener("click", () => {
+    reiniciarLeituraSemDeletar();
+});
+
+prevBtn.addEventListener("click", () => {
+    if (indiceAtual > 0) {
+        if (window.AppInventor) window.AppInventor.setWebViewString("PARAR_AUDIO");
+        indiceAtual--;
+        salvarProgressoNoDispositivo();
+        atualizarBarraProgresso();
+        renderizarModoFoco();
+        if (!estaPausado) lerBlocoAtual();
+    }
+});
+
+nextBtn.addEventListener("click", () => {
+    if (indiceAtual < blocosDeTexto.length - 1) {
+        if (window.AppInventor) window.AppInventor.setWebViewString("PARAR_AUDIO");
+        indiceAtual++;
+        salvarProgressoNoDispositivo();
+        atualizarBarraProgresso();
+        renderizarModoFoco();
+        if (!estaPausado) lerBlocoAtual();
+    }
+});
+
 shelfToggleBtn.addEventListener("click", () => {
     bookListContainer.classList.toggle("show");
     shelfArrow.textContent = bookListContainer.classList.contains("show") ? "▼" : "▶";

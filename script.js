@@ -1,4 +1,4 @@
-alert("EstudaAI Inicializado - Suporte a PDF Avançado e EPUB Ativado!");
+alert("EstudaAI Inicializado - OCR para PDFs Escaneados Ativado!");
 
 if (typeof window.speechSynthesis === 'undefined') {
     window.speechSynthesis = {
@@ -201,7 +201,7 @@ fileInput.addEventListener("change", async (event) => {
     try {
         const arquivo = event.target.files[0]; if (!arquivo) return;
         pararAudioGeral(); blocosDeTexto = []; indiceAtual = 0; estaPausado = true; playBtn.textContent = "▶";
-        lineCurrent.textContent = "Abrindo e processando arquivo...";
+        lineCurrent.textContent = "Abrindo e analisando estrutura do arquivo...";
         nomeArquivoAtual = arquivo.name;
         
         const extensao = arquivo.name.toLowerCase();
@@ -225,6 +225,7 @@ function lerArquivoTXT(arquivo) {
     leitor.readAsText(arquivo);
 }
 
+// PDF COM OCR INTEGRADOO (Lê texto digitalizado E escaneado por foto)
 function lerArquivoPDF(arquivo) {
     const leitor = new FileReader();
     leitor.onload = async function (e) {
@@ -234,19 +235,50 @@ function lerArquivoPDF(arquivo) {
             const carregandoPDF = pdfjsLib.getDocument({ data: dados, useWorkerFetch: false, isEvalSupported: false });
             const pdf = await carregandoPDF.promise; let textoAcumuladoGeral = ""; const totalPaginas = pdf.numPages;
             
+            // Cria um canvas oculto para renderizar as imagens do PDF escaneado
+            const canvasOculto = document.createElement('canvas');
+            const contextoCanvas = canvasOculto.getContext('2d');
+
             for (let i = 1; i <= totalPaginas; i++) {
+                lineCurrent.textContent = `Processando página ${i} de ${totalPaginas}...`;
                 try {
                     const pagina = await pdf.getPage(i); 
                     const conteudoTexto = await pagina.getTextContent();
+                    
                     let textoPaginaCru = ""; 
                     for (const item of conteudoTexto.items) { textoPaginaCru += item.str + " "; }
-                    let textoPaginaLimpo = textoPaginaCru.replace(/\s+/g, " ").replace(/çõ\s+es/g, "ções").trim();
-                    if (textoPaginaLimpo.length > 5) { textoAcumuladoGeral += textoPaginaLimpo + `\n\n--- FIM DA PÁGINA ${i} ---\n\n`; }
+                    let textoPaginaLimpo = textoPaginaCru.replace(/\s+/g, " ").trim();
+                    
+                    // Se a página tem texto digital nativo, usa ele direto
+                    if (textoPaginaLimpo.length > 15) {
+                        textoAcumuladoGeral += textoPaginaLimpo + `\n\n--- FIM DA PÁGINA ${i} ---\n\n`;
+                    } else {
+                        // Se a página está vazia de texto nativo, significa que é ESCANEADA (FOTO)
+                        lineCurrent.textContent = `Escaneando texto por inteligência artificial na pág. ${i}...`;
+                        
+                        const visualizacao = pagina.getViewport({ scale: 1.5 });
+                        canvasOculto.height = visualizacao.height;
+                        canvasOculto.width = visualizacao.width;
+                        
+                        await pagina.render({ canvasContext: contextoCanvas, viewport: visualizacao }).promise;
+                        const imagemUrl = canvasOculto.toDataURL('image/jpeg');
+                        
+                        // Executa o Tesseract OCR na imagem gerada da página
+                        const resultadoOcr = await Tesseract.recognize(imagemUrl, 'por');
+                        let textoOcrLimpo = resultadoOcr.data.text.replace(/\s+/g, " ").trim();
+                        
+                        if (textoOcrLimpo.length > 3) {
+                            textoAcumuladoGeral += textoOcrLimpo + `\n\n--- FIM DA PÁGINA ${i} ---\n\n`;
+                        } else {
+                            textoAcumuladoGeral += "[Página contendo apenas imagens não traduzíveis]\n\n" + `--- FIM DA PÁGINA ${i} ---\n\n`;
+                        }
+                    }
                 } catch (erroPagina) {
-                    console.log("Ignorando mídia pesada da página " + i);
+                    textoAcumuladoGeral += "[Erro ao processar mídia desta página]\n\n" + `--- FIM DA PÁGINA ${i} ---\n\n`;
                     continue;
                 }
             }
+            
             textoCompletoBruto = textoAcumuladoGeral; modalTextArea.value = textoAcumuladoGeral;
             reconstruirEstruturaPorPaginas(textoAcumuladoGeral); localStorage.setItem("estudaai_ultimo_livro", nomeArquivoAtual);
             salvarLivroNoBanco(nomeArquivoAtual, textoAcumuladoGeral, 0); atualizarBarraProgresso(); renderizarModoFoco();

@@ -1,4 +1,4 @@
-alert("EstudaAI Inicializado - OCR para PDFs Escaneados Ativado!");
+alert("EstudaAI Inicializado - OCR e Correção de PDFs Ativados!");
 
 if (typeof window.speechSynthesis === 'undefined') {
     window.speechSynthesis = {
@@ -225,7 +225,7 @@ function lerArquivoTXT(arquivo) {
     leitor.readAsText(arquivo);
 }
 
-// PDF COM OCR INTEGRADOO (Lê texto digitalizado E escaneado por foto)
+// PDF OTIMIZADO - CORRIGE TEXTOS QUEBRADOS / FONTES MAL CODIFICADAS E TRADUZ POR OCR
 function lerArquivoPDF(arquivo) {
     const leitor = new FileReader();
     leitor.onload = async function (e) {
@@ -235,7 +235,6 @@ function lerArquivoPDF(arquivo) {
             const carregandoPDF = pdfjsLib.getDocument({ data: dados, useWorkerFetch: false, isEvalSupported: false });
             const pdf = await carregandoPDF.promise; let textoAcumuladoGeral = ""; const totalPaginas = pdf.numPages;
             
-            // Cria um canvas oculto para renderizar as imagens do PDF escaneado
             const canvasOculto = document.createElement('canvas');
             const contextoCanvas = canvasOculto.getContext('2d');
 
@@ -247,13 +246,21 @@ function lerArquivoPDF(arquivo) {
                     
                     let textoPaginaCru = ""; 
                     for (const item of conteudoTexto.items) { textoPaginaCru += item.str + " "; }
-                    let textoPaginaLimpo = textoPaginaCru.replace(/\s+/g, " ").trim();
                     
-                    // Se a página tem texto digital nativo, usa ele direto
-                    if (textoPaginaLimpo.length > 15) {
+                    // Remove comandos ocultos invisíveis que quebram o layout do livro antigo
+                    let textoPaginaLimpo = textoPaginaCru
+                        .replace(/[\r\n\t\f\v]/g, " ") 
+                        .replace(/\s+/g, " ")          
+                        .trim();
+                    
+                    // Avalia se o texto digital nativo é real ou apenas lixo eletrônico (\f, \t, @, bizarro)
+                    let apenasLetras = textoPaginaLimpo.replace(/[^a-zA-ZáàâãéèêíïóôõöúçñÁÀÂÃÉÈÊÍÏÓÔÕÖÚÇÑ\s]/g, "");
+                    
+                    // Se a página tiver texto digital legível de verdade, usa direto (Super Rápido)
+                    if (textoPaginaLimpo.length > 25 && apenasLetras.trim().length > (textoPaginaLimpo.length * 0.4)) {
                         textoAcumuladoGeral += textoPaginaLimpo + `\n\n--- FIM DA PÁGINA ${i} ---\n\n`;
                     } else {
-                        // Se a página está vazia de texto nativo, significa que é ESCANEADA (FOTO)
+                        // Se falhar no teste de qualidade (texto todo mascado ou imagem pura), aciona o scanner de IA
                         lineCurrent.textContent = `Escaneando texto por inteligência artificial na pág. ${i}...`;
                         
                         const visualizacao = pagina.getViewport({ scale: 1.5 });
@@ -263,18 +270,17 @@ function lerArquivoPDF(arquivo) {
                         await pagina.render({ canvasContext: contextoCanvas, viewport: visualizacao }).promise;
                         const imagemUrl = canvasOculto.toDataURL('image/jpeg');
                         
-                        // Executa o Tesseract OCR na imagem gerada da página
                         const resultadoOcr = await Tesseract.recognize(imagemUrl, 'por');
-                        let textoOcrLimpo = resultadoOcr.data.text.replace(/\s+/g, " ").trim();
+                        let textoOcrLimpo = resultadoOcr.data.text.replace(/[\r\n\t\f\v]/g, " ").replace(/\s+/g, " ").trim();
                         
                         if (textoOcrLimpo.length > 3) {
                             textoAcumuladoGeral += textoOcrLimpo + `\n\n--- FIM DA PÁGINA ${i} ---\n\n`;
                         } else {
-                            textoAcumuladoGeral += "[Página contendo apenas imagens não traduzíveis]\n\n" + `--- FIM DA PÁGINA ${i} ---\n\n`;
+                            textoAcumuladoGeral += "[Página vazia ou sem texto legível]\n\n" + `--- FIM DA PÁGINA ${i} ---\n\n`;
                         }
                     }
                 } catch (erroPagina) {
-                    textoAcumuladoGeral += "[Erro ao processar mídia desta página]\n\n" + `--- FIM DA PÁGINA ${i} ---\n\n`;
+                    textoAcumuladoGeral += "[Erro ao processar dados desta página]\n\n" + `--- FIM DA PÁGINA ${i} ---\n\n`;
                     continue;
                 }
             }
